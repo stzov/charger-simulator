@@ -35,9 +35,14 @@ export class ChargerSimulator {
     this.config = {...defaultConfig, ...config}
 
     this.configurationKeys = [
+      {key: "localAuthorizationList", readonly: false, value: []},
       {key: "HeartBeatInterval", readonly: false, value: "" + config.defaultHeartbeatIntervalSec},
       {key: "ResetRetries", readonly: false, value: "1"},
       {key: "MeterValueSampleInterval", readonly: false, value: config.meterValuesIntervalSec},
+      {key: "NumberOfConnectors", readonly: true, value: "2"},
+      {key: "ChargePointVendor", readonly: true, value: "Mock"},
+      {key: "ChargePointModel", readonly: true, value: "Simulator"},
+      {key: "ChargeBoxSerialNumber", readonly: true, value: "SN0000000000000001"},
     ]
   }
 
@@ -121,7 +126,7 @@ export class ChargerSimulator {
         this.charged = 0
 
         this.meterTimer = setInterval(() => {
-          this.charged += Math.random() > 0.66 ? 30 : 20 // 26.6 W / 10s avg = 9.36 Kw
+          this.charged += Math.random() > 0.5 ? Math.random() > 0.5 ? 400 : 300 :  Math.random() ? 200 : 500
 
           this.centralSystem.MeterValues({
             connectorId,
@@ -140,19 +145,36 @@ export class ChargerSimulator {
                     measurand: "SoC",
                     unit: "Percent",
                   },
+                  {
+                    value: "" + (Math.random() * (1 - 2) + 1)*150,
+                    measurand: "Power.Active.Import",
+                    unit: "W",
+                  },
+                  {
+                    value: "" + (Math.random() * (1 - 2) + 1),
+                    measurand: "Current.Import",
+                    unit: "A",
+                    phase: "L1"
+                  },
                 ],
               },
             ],
           })
         }, this.config.meterValuesIntervalSec * 1000)
       },
-      delay ? this.config.startDelayMs : 0
+      delay ? this.config.startDelayMs : 1000
     )
 
     return true
   }
 
-  public stopTransaction(delay) {
+  public printConf() {
+    console.log(JSON.stringify(this.configurationKeys));
+
+    return true
+  }
+
+  public stopTransaction(params, delay) {
     if (!this.meterTimer) {
       return false
     }
@@ -162,7 +184,7 @@ export class ChargerSimulator {
     setTimeout(
       async () => {
         await this.centralSystem.StopTransaction({
-          transactionId: this.transactionId,
+          ...params,
           timestamp: new Date(),
           meterStop: this.charged,
         })
@@ -196,8 +218,20 @@ export class ChargerSimulator {
     },
 
     RemoteStopTransaction: async (req) => {
+      this.stopTransaction(req, false)
+      this.centralSystem.StatusNotification({
+        connectorId: 1,
+        errorCode: "NoError",
+        status: "Finishing",
+      });
       return {
-        status: this.stopTransaction(true) ? "Accepted" : "Rejected",
+        status: "Accepted",
+      }
+    },
+
+    UnlockConnector: async (req) => {
+      return {
+        status: "Accepted",
       }
     },
 
@@ -208,9 +242,9 @@ export class ChargerSimulator {
     },
     ChangeConfiguration: async (req) => {
       for (let i = 0; i < this.configurationKeys.length; i++) {
-        if (this.configurationKeys[i].key == req.key) {
+        // if (this.configurationKeys[i].key == req.key) {
           this.configurationKeys[i].value = "" + req.value
-        }
+        // }
       }
 
       return {status: "Accepted"}
@@ -237,11 +271,53 @@ export class ChargerSimulator {
     },
 
     TriggerMessage: async (req) => {
+      this.centralSystem.MeterValues({
+        connectorId: 1,
+        transactionId: this.transactionId,
+        meterValue: [
+          {
+            timestamp: new Date(),
+            sampledValue: [
+              {
+                value: "" + this.charged,
+                measurand: "Energy.Active.Import.Register",
+                unit: "Wh",
+              },
+              {
+                value: "38",
+                measurand: "SoC",
+                unit: "Percent",
+              },
+              {
+                value: "" + (Math.random() * (1 - 2) + 1)*150,
+                measurand: "Power.Active.Import",
+                unit: "W",
+              },
+              {
+                value: "" + (Math.random() * (1 - 2) + 1),
+                measurand: "Current.Import",
+                unit: "A",
+                phase: "L1"
+              },
+            ],
+          },
+        ],
+      });
       return {status: "Accepted"}
     },
 
     UpdateFirmware: async (req) => {
       return {status: "Accepted"}
     },
+
+    SendLocalList: async (req) => {
+      for (let i = 0; i < this.configurationKeys.length; i++) {
+        if (this.configurationKeys[i].key == "localAuthorizationList") {
+          // console.log(req);
+          this.configurationKeys[i].value = req.localAuthorizationList
+        }
+      }
+      return {status: "Accepted"}
+    }
   }
 }

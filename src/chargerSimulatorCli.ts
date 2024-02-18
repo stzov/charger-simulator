@@ -29,7 +29,7 @@ const optionList = [
     description: "OCPP ID to be used for simulating charger.\nDefault is 'test'.",
     typeLabel: "{underline ChargerId}",
     alias: "i",
-    defaultValue: "test",
+    defaultValue: "test1",
   },
   {
     name: "connectorId",
@@ -90,21 +90,25 @@ const usageSections = [
     b:        send BootNotification
     o:        send BootNotification with optional parameters
     d:        send DataTransfer
-    i:        disconnect from Central System
+    D:        disconnect from Central System
     
     Connector ${connectorId} status
     ---
-    a:        send Available status 
-    p:        send Preparing status
-    c:        send Charging status
-    e:        send SuspendedEV status
-    f:        send Finishing status
+    A:        send Available status 
+    U:        send Unavailable status
+    P:        send Preparing status
+    C:        send Charging status
+    F:        send Finishing status
     
     Transaction on connector ${connectorId}, tag ${idTag}
     --
     u:        Authorize
     s:        StartTransaction
     t:        StopTransaction
+
+    Debug
+    --
+    p:        Print current configuration
   `)
 
   async function sendStatus(status: string) {
@@ -118,8 +122,8 @@ const usageSections = [
   const commands = {
     b: () =>
       simulator.centralSystem.BootNotification({
-        chargePointVendor: "OC",
-        chargePointModel: "OCX",
+        chargePointVendor: "Mock",
+        chargePointModel: "Simulator",
       }),
     o: () =>
       simulator.centralSystem.BootNotification({
@@ -138,17 +142,20 @@ const usageSections = [
         data: "Data",
       }),
 
-    i: () => simulator.disconnect(),
+    D: () => simulator.disconnect(),
 
-    a: () => sendStatus("Available"),
-    p: () => sendStatus("Preparing"),
-    c: () => sendStatus("Charging"),
-    e: () => sendStatus("SuspendedEV"),
-    f: () => sendStatus("Finishing"),
+    E: () => sendStatus("SuspendedEV"),
+    A: () => sendStatus("Available"),
+    P: () => sendStatus("Preparing"),
+    C: () => sendStatus("Charging"),
+    F: () => sendStatus("Finishing"),
+    U: () => sendStatus("Unavailable"),
 
     u: () => simulator.centralSystem.Authorize({idTag}),
     s: () => simulator.startTransaction({idTag, connectorId}, false),
-    t: () => simulator.stopTransaction(false),
+    t: () => simulator.stopTransaction({}, false),
+
+    p: () => simulator.printConf(),
   }
 
   readline.emitKeypressEvents(process.stdin)
